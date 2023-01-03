@@ -1,21 +1,30 @@
-import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import tensorflow as tf
 from keras import layers
 from tensorboard.plugins.hparams import api as hp
 
+print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
 
 def generate_datasets():
+    DATASET_SIZE = 830
     base_dir = 'dataset'
-    train_dataset = tf.keras.utils.image_dataset_from_directory(base_dir, image_size=(200, 200), subset='training',
-                                                                seed=1,
-                                                                validation_split=0.1, batch_size=32)
+    dataset = tf.keras.utils.image_dataset_from_directory(base_dir, image_size=(200, 200), seed=1, batch_size=32)
+    #dataset = dataset.concatenate(dataset.map(augment_data))
+    train_dataset = dataset.take(int(DATASET_SIZE * 0.9))
+    val_dataset = dataset.skip(int(DATASET_SIZE * 0.9))
 
-    test_dataset = tf.keras.utils.image_dataset_from_directory(base_dir, image_size=(200, 200), subset='validation',
-                                                               seed=1,
-                                                               validation_split=0.1, batch_size=32)
-    return train_dataset, test_dataset
+    return train_dataset, val_dataset
+
+
+def augment_data(image, label):
+    flip = tf.keras.layers.RandomFlip("vertical")
+    rotate = tf.keras.layers.RandomRotation(0.2)
+    translation = tf.keras.layers.RandomTranslation(height_factor=0.2, width_factor=0.2)
+    brightness = tf.keras.layers.RandomBrightness(0.3)
+
+    return flip(rotate(translation(brightness(image)))), label
 
 
 def generate_checkpoint_callback(hparams):
@@ -61,7 +70,7 @@ def run_training(train_dataset, test_dataset, hparams):
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
     model_checkpoint_callback = generate_checkpoint_callback(hparams)
-    return model.fit(train_dataset, epochs=5, validation_data=test_dataset,
+    return model.fit(train_dataset, epochs=20, validation_data=test_dataset,
                      callbacks=[tensorboard_callback, model_checkpoint_callback])
 
 
